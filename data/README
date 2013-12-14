@@ -1,0 +1,4 @@
+This directory contains a train and test set based on real data for implicit
+feedback collaborative filtering. Each line lists a user index and an item
+index. There are 1000 users and 90126 unique items. Each item that appears in
+test set is listed in the training set at least once.
