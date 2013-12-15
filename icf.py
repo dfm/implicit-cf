@@ -52,12 +52,14 @@ class ICF(object):
 
     def test(self, test_set, M=200):
         user_items = defaultdict(list)
-        [user_items[u].append(a) for u, a in test_set]
+        item_list = set()
+        [(user_items[u].append(a), item_list.add(a)) for u, a in test_set]
+        item_list = np.array(list(item_list), dtype=int)
 
         recall = 0.0
         for u, items in user_items.items():
-            r = np.dot(self.V, self.U[u])
-            inds = np.argsort(r)[::-1]
+            r = np.dot(self.V[item_list], self.U[u])
+            inds = item_list[np.argsort(r)[::-1]]
             recall += np.sum([i in items for i in inds[:M]]) / len(items)
         return recall / len(user_items)
 
@@ -68,7 +70,7 @@ if __name__ == "__main__":
                     for l in gzip.open("data/train.txt.gz")]
     test_set = [map(int, l.split()) for l in gzip.open("data/test.txt.gz")]
 
-    model = ICF(50, 1000, 90126)
+    model = ICF(200, 1000, 90126)
     for i in model.train(training_set):
         print("Testing")
         print(model.test(test_set))
