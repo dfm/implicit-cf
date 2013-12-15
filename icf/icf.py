@@ -7,6 +7,7 @@ from __future__ import (division, print_function, absolute_import,
 __all__ = []
 
 from collections import defaultdict
+
 import numpy as np
 
 
@@ -23,7 +24,9 @@ class ICF(object):
         self.U = np.random.rand(nusers, K)
         self.V = np.random.rand(nitems, K)
 
-    def train(self, training_set):
+    def train(self, training_set, pool=None):
+        M = map if pool is None else pool.map
+
         user_items = [[] for i in range(self.nusers)]
         item_users = [[] for i in range(self.nitems)]
         [(user_items[u].append(a), item_users[a].append(u))
@@ -32,23 +35,31 @@ class ICF(object):
         for i in range(10):
             print("Updating users")
             vtv = np.dot(self.V.T, self.V)
-            for i, vec in enumerate(user_items):
-                vm = self.V[vec]
-                vtcv = vtv + self.alpha * np.dot(vm.T, vm)
-                vtcv[np.diag_indices(self.K)] += self.l2u
-                b = (1+self.alpha)*np.sum(vm, axis=0)
-                self.U[i] = np.linalg.solve(vtcv, b)
+            self.U = np.vstack(M(_function_wrapper(self,
+                                                   "compute_user_update",
+                                                   vtv), user_items))
 
             print("Updating items")
             utu = np.dot(self.U.T, self.U)
-            for i, vec in enumerate(item_users):
-                um = self.U[vec]
-                utcu = utu + self.alpha * np.dot(um.T, um)
-                utcu[np.diag_indices(self.K)] += self.l2v
-                b = (1+self.alpha)*np.sum(um, axis=0)
-                self.V[i] = np.linalg.solve(utcu, b)
+            self.V = np.vstack(M(_function_wrapper(self,
+                                                   "compute_item_update",
+                                                   utu), item_users))
 
             yield i
+
+    def compute_user_update(self, vec, vtv):
+        vm = self.V[vec]
+        vtcv = vtv + self.alpha * np.dot(vm.T, vm)
+        vtcv[np.diag_indices(self.K)] += self.l2u
+        b = (1+self.alpha)*np.sum(vm, axis=0)
+        return np.linalg.solve(vtcv, b)
+
+    def compute_item_update(self, vec, utu):
+        um = self.U[vec]
+        utcu = utu + self.alpha * np.dot(um.T, um)
+        utcu[np.diag_indices(self.K)] += self.l2v
+        b = (1+self.alpha)*np.sum(um, axis=0)
+        return np.linalg.solve(utcu, b)
 
     def test(self, test_set, M=200):
         user_items = defaultdict(list)
@@ -64,13 +75,13 @@ class ICF(object):
         return recall / len(user_items)
 
 
-if __name__ == "__main__":
-    import gzip
-    training_set = [map(int, l.split())
-                    for l in gzip.open("data/train.txt.gz")]
-    test_set = [map(int, l.split()) for l in gzip.open("data/test.txt.gz")]
+class _function_wrapper(object):
 
-    model = ICF(200, 1000, 90126)
-    for i in model.train(training_set):
-        print("Testing")
-        print(model.test(test_set))
+    def __init__(self, target, attr, *args, **kwargs):
+        self.target = target
+        self.attr = attr
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, v):
+        return getattr(self.target, self.attr)(v, *self.args, **self.kwargs)
