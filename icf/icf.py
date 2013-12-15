@@ -13,7 +13,7 @@ import numpy as np
 
 class ICF(object):
 
-    def __init__(self, K, nusers, nitems, alpha=40.0, l2v=0.01, l2u=0.01):
+    def __init__(self, K, nusers, nitems, alpha=10.0, l2v=0.1, l2u=0.1):
         self.K = K
         self.nusers = nusers
         self.nitems = nitems
@@ -24,13 +24,19 @@ class ICF(object):
         self.U = np.random.rand(nusers, K)
         self.V = np.random.rand(nitems, K)
 
-    def train(self, training_set, pool=None):
+    def train(self, training_set, test_set=None, pool=None, N=100):
         M = map if pool is None else pool.map
 
         user_items = [[] for i in range(self.nusers)]
         item_users = [[] for i in range(self.nitems)]
         [(user_items[u].append(a), item_users[a].append(u))
          for u, a in training_set]
+
+        if test_set is not None:
+            test_user_items = defaultdict(list)
+            [test_user_items[u].append(a) for u, a in test_set]
+            test_args = [(u, t, user_items[u])
+                         for u, t in test_user_items.items()]
 
         for i in range(10):
             print("Updating users")
@@ -45,7 +51,13 @@ class ICF(object):
                                                    "compute_item_update",
                                                    utu), item_users))
 
-            yield i
+            # Compute the held out recall.
+            if test_set is not None:
+                print("Computing held out recall")
+                yield np.mean(M(_function_wrapper(self, "compute_recall", N=N),
+                                test_args))
+            else:
+                yield 0.0
 
     def compute_user_update(self, vec, vtv):
         vm = self.V[vec]
@@ -61,18 +73,20 @@ class ICF(object):
         b = (1+self.alpha)*np.sum(um, axis=0)
         return np.linalg.solve(utcu, b)
 
-    def test(self, test_set, M=200):
-        user_items = defaultdict(list)
-        item_list = set()
-        [(user_items[u].append(a), item_list.add(a)) for u, a in test_set]
-        item_list = np.array(list(item_list), dtype=int)
+    def compute_recall(self, args, N=100):
+        u, items, previous = args
 
-        recall = 0.0
-        for u, items in user_items.items():
-            r = np.dot(self.V[item_list], self.U[u])
-            inds = item_list[np.argsort(r)[::-1]]
-            recall += np.sum([i in items for i in inds[:M]]) / len(items)
-        return recall / len(user_items)
+        # Remove items in training data.
+        m = np.ones(self.nitems, dtype=bool)
+        m[previous] = False
+
+        # Compute the top recommendations.
+        r = np.dot(self.V[m], self.U[u])
+        inds = np.arange(self.nitems)[m][np.argsort(r)[::-1]]
+
+        # Compute the recall.
+        recall = np.sum([i in items for i in inds[:N]]) / len(items)
+        return recall
 
 
 class _function_wrapper(object):

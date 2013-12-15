@@ -11,7 +11,7 @@ training_set = [map(int, l.split())
 test_set = [map(int, l.split()) for l in gzip.open("data/test.txt.gz")]
 
 pool = Pool()
-model = ICF(50, 1000, 90126)
-for i in model.train(training_set, pool=pool):
-    print("Testing")
-    print(model.test(test_set))
+model = ICF(200, 1000, 90126)
+
+for recall in model.train(training_set, test_set=test_set, pool=pool):
+    print(recall)
