@@ -4,7 +4,7 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = []
+__all__ = ["ICF"]
 
 from collections import defaultdict
 
@@ -24,7 +24,7 @@ class ICF(object):
         self.U = np.random.rand(nusers, K)
         self.V = np.random.rand(nitems, K)
 
-    def train(self, training_set, test_set=None, pool=None, N=100):
+    def train(self, training_set, test_set=None, pool=None, N=200):
         M = map if pool is None else pool.map
 
         user_items = [[] for i in range(self.nusers)]
@@ -73,20 +73,32 @@ class ICF(object):
         b = (1+self.alpha)*np.sum(um, axis=0)
         return np.linalg.solve(utcu, b)
 
-    def compute_recall(self, args, N=100):
+    def compute_recall(self, args, N=200):
         u, items, previous = args
-
-        # Remove items in training data.
-        m = np.ones(self.nitems, dtype=bool)
-        m[previous] = False
+        items += previous
 
         # Compute the top recommendations.
-        r = np.dot(self.V[m], self.U[u])
-        inds = np.arange(self.nitems)[m][np.argsort(r)[::-1]]
+        r = np.dot(self.V, self.U[u])
+        inds = np.argsort(r)[::-1]
 
         # Compute the recall.
         recall = np.sum([i in items for i in inds[:N]]) / len(items)
         return recall
+
+    # def compute_recall(self, args, N=200):
+    #     u, items, previous = args
+
+    #     # Remove items in training data.
+    #     m = np.ones(self.nitems, dtype=bool)
+    #     m[previous] = False
+
+    #     # Compute the top recommendations.
+    #     r = np.dot(self.V[m], self.U[u])
+    #     inds = np.arange(self.nitems)[m][np.argsort(r)[::-1]]
+
+    #     # Compute the recall.
+    #     recall = np.sum([i in items for i in inds[:N]]) / len(items)
+    #     return recall
 
 
 class _function_wrapper(object):
